@@ -1,7 +1,8 @@
+import "./App.css";
 import React, { useEffect, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Link, useParams } from "react-router-dom";
 import axios from "axios";
-import jwt_decode from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 
 // ListingDetail component
 function ListingDetail() {
@@ -32,7 +33,7 @@ function ListingDetail() {
         "http://localhost:5000/api/bookings",
         {
           listingId: listing._id,
-          user: "placeholder@example.com" // We will replace this later
+          user: "placeholder@example.com" // You can replace this later with decoded email
         },
         {
           headers: { Authorization: `Bearer ${token}` }
@@ -130,16 +131,22 @@ function Register() {
 // Home component
 function Home() {
   const [listings, setListings] = useState([]);
+  const [searchLocation, setSearchLocation] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+
+  const fetchListings = async (filters = {}) => {
+    try {
+      const response = await axios.get("http://localhost:5000/api/listings", {
+        params: filters,
+      });
+      setListings(response.data);
+    } catch (err) {
+      console.error("Error fetching listings:", err);
+    }
+  };
 
   useEffect(() => {
-    const fetchListings = async () => {
-      try {
-        const response = await axios.get("http://localhost:5000/api/listings");
-        setListings(response.data);
-      } catch (err) {
-        console.error("Error fetching listings:", err);
-      }
-    };
+    // Load all listings initially
     fetchListings();
   }, []);
 
@@ -147,13 +154,21 @@ function Home() {
   let userEmail = null;
   if (token) {
     try {
-      const decoded = jwt_decode(token);
+      const decoded = jwtDecode(token);
       userEmail = decoded.email;
     } catch (error) {
       console.error("Invalid token:", error);
       localStorage.removeItem("token");
     }
   }
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    fetchListings({
+      location: searchLocation,
+      maxPrice: maxPrice,
+    });
+  };
 
   return (
     <div>
@@ -162,6 +177,7 @@ function Home() {
         {userEmail ? (
           <>
             <p>Welcome, {userEmail}</p>
+            <Link to="/my-bookings">My Bookings</Link>
             <button
               onClick={() => {
                 localStorage.removeItem("token");
@@ -177,23 +193,98 @@ function Home() {
           </div>
         )}
       </div>
+
+      {/* Search form */}
+      <form onSubmit={handleSearch} style={{ margin: "20px 0" }}>
+        <input
+          type="text"
+          placeholder="Search by location"
+          value={searchLocation}
+          onChange={(e) => setSearchLocation(e.target.value)}
+          style={{ marginRight: "10px" }}
+        />
+        <input
+          type="number"
+          placeholder="Max Price"
+          value={maxPrice}
+          onChange={(e) => setMaxPrice(e.target.value)}
+          style={{ marginRight: "10px" }}
+        />
+        <button type="submit">Search</button>
+      </form>
+
       <div className="listings">
-        {listings.map((listing) => (
-          <div key={listing._id} className="listing-card">
-            <Link to={`/listing/${listing._id}`}>
-              <img
-                src={listing.images[0]}
-                alt={listing.title}
-                className="listing-image"
-                style={{ width: "300px", height: "200px" }}
-              />
-              <h3>{listing.title}</h3>
-              <p>{listing.location}</p>
-              <p>₹{listing.price}</p>
-            </Link>
-          </div>
-        ))}
+        {listings.length === 0 ? (
+          <p>No listings found.</p>
+        ) : (
+          listings.map((listing) => (
+            <div key={listing._id} className="listing-card">
+              <Link to={`/listing/${listing._id}`}>
+                <img
+                  src={listing.images[0]}
+                  alt={listing.title}
+                  className="listing-image"
+                  style={{ width: "300px", height: "200px" }}
+                />
+                <h3>{listing.title}</h3>
+                <p>{listing.location}</p>
+                <p>₹{listing.price}</p>
+              </Link>
+            </div>
+          ))
+        )}
       </div>
+    </div>
+  );
+}
+
+// MyBookings component
+function MyBookings() {
+  const [bookings, setBookings] = useState([]);
+  const token = localStorage.getItem("token");
+
+  useEffect(() => {
+    const fetchBookings = async () => {
+      try {
+        if (!token) {
+          alert("Please login to view your bookings.");
+          return;
+        }
+
+        const response = await axios.get("http://localhost:5000/api/bookings/me", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        setBookings(response.data);
+      } catch (err) {
+        console.error("Error fetching bookings:", err);
+        alert("Failed to load bookings.");
+      }
+    };
+
+    fetchBookings();
+  }, [token]);
+
+  if (!token) {
+    return <p>Please login to view your bookings.</p>;
+  }
+
+  return (
+    <div>
+      <h2>My Bookings</h2>
+      {bookings.length === 0 ? (
+        <p>You have no bookings yet.</p>
+      ) : (
+        <ul>
+          {bookings.map((booking) => (
+            <li key={booking._id}>
+              <h3>{booking.listingId?.title}</h3>
+              <p><strong>Location:</strong> {booking.listingId?.location}</p>
+              <p><strong>Price:</strong> ₹{booking.listingId?.price}</p>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -207,6 +298,7 @@ function App() {
         <Route path="/listing/:id" element={<ListingDetail />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/my-bookings" element={<MyBookings />} />
       </Routes>
     </Router>
   );

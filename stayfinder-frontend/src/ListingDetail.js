@@ -1,9 +1,11 @@
+//import "./ListingDetail.css"
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
+import { jwtDecode } from "jwt-decode";
 
 function ListingDetail() {
-  const { id } = useParams(); // ✅ gets the id from URL
+  const { id } = useParams();
   const [listing, setListing] = useState(null);
 
   useEffect(() => {
@@ -18,13 +20,28 @@ function ListingDetail() {
     fetchListing();
   }, [id]);
 
-  // ✅ Add your handleBooking function HERE
   const handleBooking = async () => {
     try {
-      await axios.post("http://localhost:5000/api/bookings", {
-        listingId: listing._id,
-        user: "testuser@example.com" // for now, a placeholder user
-      });
+      const token = localStorage.getItem("token");
+      if (!token) {
+        alert("Please login to book.");
+        return;
+      }
+
+      const decoded = jwtDecode(token);
+      const userEmail = decoded.email;
+
+      await axios.post(
+        "http://localhost:5000/api/bookings",
+        {
+          listingId: listing._id,
+          user: userEmail
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
       alert("Booking successful!");
     } catch (err) {
       console.error("Error booking:", err);
@@ -45,7 +62,6 @@ function ListingDetail() {
       <p>{listing.description}</p>
       <p><strong>Location:</strong> {listing.location}</p>
       <p><strong>Price:</strong> ₹{listing.price}</p>
-      {/* ✅ Attach handleBooking to the button */}
       <button onClick={handleBooking}>Book Now</button>
     </div>
   );
